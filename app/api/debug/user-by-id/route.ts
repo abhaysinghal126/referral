@@ -9,8 +9,8 @@ export async function GET(req: Request) {
 
   const client = await clientPromise;
   const db = client.db();
-  let objId: any;
-  try { objId = new ObjectId(id); } catch (e) { return NextResponse.json({}); }
+  let objId;
+  try { objId = new ObjectId(id); } catch { return NextResponse.json({}); }
 
   const user = await db.collection('users').findOne({ _id: objId });
   if (!user) return NextResponse.json({});

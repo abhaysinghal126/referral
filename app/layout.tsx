@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Link from "next/link";
+import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,11 +27,31 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ThemeProvider>
+          <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-black/90 backdrop-blur supports-[backdrop-filter]:bg-black/60">
+            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+              <Link href="/" className="flex items-center gap-2 text-sm font-medium text-neutral-100">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-white" />
+                <span>Referral Simulator</span>
+              </Link>
+              <nav className="flex items-center gap-2 text-sm">
+                <ThemeToggle />
+                <Link href="/auth/signin" className="text-neutral-300 hover:text-white transition-colors">Sign in</Link>
+                <Link href="/auth/signup" className="text-neutral-300 hover:text-white transition-colors">Sign up</Link>
+              </nav>
+            </div>
+          </header>
+
+          <div className="mx-auto max-w-6xl px-4 py-8">
+            {children}
+          </div>
+
+          <Toaster richColors closeButton />
+        </ThemeProvider>
       </body>
     </html>
   );

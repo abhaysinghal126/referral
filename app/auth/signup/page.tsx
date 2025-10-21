@@ -1,6 +1,11 @@
 "use client";
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -8,26 +13,25 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('');
   const [referral, setReferral] = useState('');
   const [msg, setMsg] = useState('');
-  const [toasts, setToasts] = useState<Array<{ id: number; text: string }>>([]);
+  // toast via sonner
 
-  function pushToast(text: string) {
-    const id = Date.now();
-    setToasts((t) => [{ id, text }, ...t].slice(0, 5));
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
-  }
-
-  async function submit(e: any) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, referralCode: referral }),
     });
-    const data = await res.json();
-    if (!res.ok) return setMsg(data.error || 'Error');
-    localStorage.setItem('token', data.token);
-    setMsg('Signed up! Your referral code: ' + data.user.referralCode);
-    pushToast('Signed up successfully');
+    const data = (await res.json()) as { token?: string; user?: { referralCode: string }; error?: string };
+    if (!res.ok) {
+      const m = data.error || 'Error';
+      setMsg(m);
+      toast.error(m);
+      return;
+    }
+    if (data.token) localStorage.setItem('token', data.token);
+    setMsg('Signed up! Your referral code: ' + (data.user?.referralCode || '')); 
+    toast.success('Signed up successfully');
     setTimeout(() => router.push('/'), 600);
   }
 
@@ -36,46 +40,53 @@ export default function SignUpPage() {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: exampleEmail, password: 'password123', referralCode: '3wdm91c' }),
+      body: JSON.stringify({ email: exampleEmail, password: 'password123', referralCode: 'ru99mi0' }),
     });
-    const data = await res.json();
-    if (!res.ok) return setMsg(data.error || 'Error creating example user');
-    localStorage.setItem('token', data.token);
-    pushToast('Example user created: ' + exampleEmail);
+    const data = (await res.json()) as { token?: string; error?: string };
+    if (!res.ok) {
+      const m = data.error || 'Error creating example user';
+      setMsg(m);
+      toast.error(m);
+      return;
+    }
+    if (data.token) localStorage.setItem('token', data.token);
+    toast.success('Example user created: ' + exampleEmail);
     setTimeout(() => router.push('/'), 600);
   }
 
   return (
-    <main style={{ padding: 20 }}>
-      <div style={{ maxWidth: 520, margin: '0 auto' }} className="sim-card">
-        <h1 style={{ marginBottom: 8 }}>Create account</h1>
-        <form onSubmit={submit} style={{ display: 'grid', gap: 10 }}>
-          <div>
-            <label className="muted">Email</label>
-            <input className="sim-input" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="muted">Password</label>
-            <input className="sim-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <div>
-            <label className="muted">Referral code (optional)</label>
-            <input className="sim-input" value={referral} onChange={(e) => setReferral(e.target.value)} />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="sim-button" type="submit">Sign up</button>
-            <button type="button" className="sim-button" onClick={createExampleUser}>Create example user (uses 3wdm91c)</button>
-          </div>
-        </form>
-        {msg && <p style={{ marginTop: 8 }}>{msg}</p>}
-      </div>
-
-      {/* Toaster */}
-      <div style={{ position: 'fixed', right: 20, bottom: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {toasts.map((t) => (
-          <div key={t.id} style={{ background: 'white', padding: '10px 14px', borderRadius: 8, boxShadow: '0 6px 18px rgba(17,24,39,0.08)' }}>{t.text}</div>
-        ))}
-      </div>
+    <main className="mx-auto max-w-lg">
+      <Card>
+        <CardHeader>
+          <CardTitle>Create account</CardTitle>
+          <CardDescription>Sign up with email and password</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submit} className="grid gap-4">
+            <div className="grid gap-2">
+              <label className="text-sm text-muted-foreground">Email</label>
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm text-muted-foreground">Password</label>
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm text-muted-foreground">Referral code (optional)</label>
+              <Input value={referral} onChange={(e) => setReferral(e.target.value)} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">Sign up</Button>
+              <Button type="button" variant="secondary" onClick={createExampleUser}>
+                Create example user (uses ru99mi0)
+              </Button>
+            </div>
+          </form>
+          {msg && <p className="mt-3 text-sm text-muted-foreground">{msg}</p>}
+          <Separator className="my-4" />
+          <p className="text-xs text-muted-foreground">By continuing, you agree to our Terms and Privacy Policy.</p>
+        </CardContent>
+      </Card>
     </main>
   );
 }

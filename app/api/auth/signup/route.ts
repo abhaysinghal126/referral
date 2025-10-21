@@ -1,7 +1,7 @@
 import clientPromise from '../../../../lib/mongodb';
 import { hashPassword, signToken } from '../../../../lib/auth';
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
+// no ObjectId needed in this route
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -16,13 +16,14 @@ export async function POST(req: Request) {
 
   // If referralCode provided, check it's valid (exists)
   let referredBy = null;
-  let referrerId: any = null;
+  let referrerId: string | null = null;
+  let referrerEmail: string | null = null;
   if (referralCode) {
     const referrer = await db.collection('users').findOne({ referralCode });
     if (!referrer) return NextResponse.json({ error: 'Invalid referral code' }, { status: 400 });
     referredBy = referrer._id;
-    referrerId = referrer._id;
-    var referrerEmail = referrer.email;
+    referrerId = referrer._id.toString();
+    referrerEmail = referrer.email as string;
   }
 
   const passwordHash = await hashPassword(password);

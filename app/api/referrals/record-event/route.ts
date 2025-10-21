@@ -7,8 +7,17 @@ POST body: { referredId, eventName, props }
 Records activation events for a referred user and if activation is complete, mark referral activated and reward referrer.
 */
 
+type ActivationProps = Record<string, unknown> | undefined;
+type UserDoc = {
+  _id: unknown;
+  referredBy?: string | unknown;
+  activationEvents?: Record<string, { completed: boolean; props?: ActivationProps; timestamp?: Date }>;
+  requiredEvents?: string[];
+  projectsSaved?: number;
+};
+
 export async function POST(req: Request) {
-  const body = await req.json();
+  const body = (await req.json()) as { referredId?: string; referredEmail?: string; eventName: string; props?: ActivationProps };
   const { referredId, referredEmail, eventName, props } = body;
   if ((!referredId && !referredEmail) || !eventName) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
 
@@ -16,7 +25,7 @@ export async function POST(req: Request) {
   const db = client.db();
 
   // find the referred user
-  let user = null;
+  let user: UserDoc | null = null;
   if (referredId) {
     user = await db.collection('users').findOne({ _id: new ObjectId(referredId) });
   } else if (referredEmail) {
@@ -25,7 +34,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
   // update activationEvents on the user document
-  const activationEvents = user.activationEvents || {};
+  const activationEvents: NonNullable<UserDoc['activationEvents']> = user.activationEvents || {};
   activationEvents[eventName] = { completed: true, props, timestamp: new Date() };
 
   // Persist the updated activation events
@@ -52,11 +61,15 @@ export async function POST(req: Request) {
       if (setRes && setRes.value) {
         const referrerIdRaw = user.referredBy;
         if (referrerIdRaw) {
-          let refObjId: any = referrerIdRaw;
-          try {
-            refObjId = typeof referrerIdRaw === 'string' ? new ObjectId(referrerIdRaw) : referrerIdRaw;
-          } catch (e) {
-            refObjId = null;
+          let refObjId = null as null | InstanceType<typeof ObjectId>;
+          if (typeof referrerIdRaw === 'string') {
+            try { refObjId = new ObjectId(referrerIdRaw); } catch { refObjId = null; }
+          } else if (
+            typeof referrerIdRaw === 'object' && referrerIdRaw !== null &&
+            // cast minimal shape to avoid any
+            typeof (referrerIdRaw as { toString: () => string }).toString === 'function'
+          ) {
+            try { refObjId = new ObjectId((referrerIdRaw as { toString: () => string }).toString()); } catch { refObjId = null; }
           }
           if (refObjId) {
             await db.collection('users').updateOne({ _id: refObjId }, { $inc: { premiumMonths: 1 } });

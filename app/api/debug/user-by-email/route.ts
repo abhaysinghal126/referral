@@ -24,7 +24,7 @@ export async function GET(req: Request) {
         const refUser = await db.collection('users').findOne({ _id: refId });
         if (refUser) referrerEmail = refUser.email;
       }
-    } catch (e) {
+    } catch {
       // ignore and fall back
       referrerEmail = null;
     }
@@ -33,7 +33,13 @@ export async function GET(req: Request) {
   // No separate referrals collection in this schema — we only use `user.referredBy`.
 
   // Return referrerEmail inside the user object as well for convenience on the client
-  const outUser: any = { id: user._id.toString(), email: user.email, referralCode: user.referralCode, credits: user.credits || 0, premiumMonths: user.premiumMonths || 0 };
+  const outUser: { id: string; email: string; referralCode?: string; credits: number; premiumMonths: number; referrerEmail?: string } = {
+    id: user._id.toString(),
+    email: user.email,
+    referralCode: user.referralCode,
+    credits: user.credits || 0,
+    premiumMonths: user.premiumMonths || 0,
+  };
   if (referrerEmail) outUser.referrerEmail = referrerEmail;
 
   return NextResponse.json({ user: outUser, referrerEmail });
