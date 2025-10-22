@@ -32,6 +32,29 @@ export default function SignInPage() {
     setTimeout(() => router.push('/'), 300);
   }
 
+  async function loginAsTest() {
+    const testEmail = 'test@test.com';
+    const testPassword = '1234';
+    setEmail(testEmail);
+    setPassword(testPassword);
+    const res = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: testEmail, password: testPassword }),
+    });
+    const data = (await res.json()) as { token?: string; error?: string };
+    if (!res.ok) {
+      const m = data.error || 'Error';
+      setMsg(m);
+      toast.error(m);
+      return;
+    }
+    if (data.token) localStorage.setItem('token', data.token);
+    setMsg('Signed in!');
+    toast.success('Signed in');
+    setTimeout(() => router.push('/'), 300);
+  }
+
   return (
     <main className="mx-auto max-w-md">
       <Card>
@@ -50,6 +73,7 @@ export default function SignInPage() {
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <Button type="submit" className="w-full">Sign in</Button>
+            <Button type="button" variant="secondary" className="w-full" onClick={loginAsTest}>Login as test account</Button>
           </form>
           {msg && <p className="mt-3 text-sm text-muted-foreground">{msg}</p>}
         </CardContent>

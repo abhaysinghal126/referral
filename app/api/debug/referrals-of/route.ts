@@ -23,14 +23,23 @@ export async function GET(req: Request) {
     referralCode?: string;
     activationEvents?: Record<string, { completed?: boolean }>;
     requiredEvents?: string[];
+    referralStatus?: string | null;
+    activatedAt?: Date;
+    rewardReceived?: boolean;
   }) => {
     const activationEvents = u.activationEvents || {};
     const required: string[] = u.requiredEvents || ['Profile Completed', 'Project Saved', 'Literature Matrix Created'];
-    const completed = required.every((k: string) => activationEvents[k]?.completed);
+    const completed = (
+      u.referralStatus === 'activated' ||
+      !!u.activatedAt ||
+      u.rewardReceived === true ||
+      required.every((k: string) => activationEvents[k]?.completed === true)
+    );
     return {
       id: u._id.toString(),
       email: u.email,
       referralCode: u.referralCode,
+      referralStatus: u.referralStatus || null,
       completed,
       required,
       activationEvents: Object.keys(activationEvents).reduce((acc: Record<string, boolean>, k: string) => {

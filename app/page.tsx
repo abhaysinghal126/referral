@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 type BasicUser = {
@@ -13,6 +14,7 @@ type BasicUser = {
   premiumMonths?: number;
   referredBy?: string;
   referrerEmail?: string;
+  projectsSaved?: number;
 };
 type MeResponse = { user?: Pick<BasicUser, 'id' | 'email' | 'referralCode'> };
 type DebugUserResponse = { user?: BasicUser };
@@ -25,6 +27,7 @@ type ReferralRow = {
   completed: boolean;
   required: string[];
   activationEvents: Record<string, boolean>;
+  referralStatus?: string | null;
 };
 type ReferralsResponse = { referrals: ReferralRow[] };
 
@@ -34,9 +37,36 @@ export default function Home() {
   const [log, setLog] = useState<string[]>([]);
   const [referrerUser, setReferrerUser] = useState<ReferrerInfo | null>(null);
   const [myUser, setMyUser] = useState<BasicUser | null>(null);
+  const [referralLink, setReferralLink] = useState<string>("");
+  const [showInviteBanner, setShowInviteBanner] = useState<boolean>(false);
+  const [showReferralUI, setShowReferralUI] = useState<boolean>(false);
 
   function addLog(msg: string) {
     setLog((s) => [msg, ...s].slice(0, 20));
+  }
+
+  // Simulate current user's first project save and show the invite prompt banner
+  async function triggerMyFirstProject() {
+    const currentId = myUser?.id || user?.id;
+    if (!currentId) return addLog('triggerMyFirstProject: no current user loaded');
+    const res = await fetch('/api/referrals/trigger-first-project', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentId })
+    });
+    let data: TriggerFirstProjectResponse | { ok: boolean } = { ok: res.ok };
+    try { data = await res.json() as TriggerFirstProjectResponse; } catch { data = { ok: res.ok }; }
+    addLog('triggerMyFirstProject: ' + JSON.stringify(data));
+    // Always reveal the prompt after simulate click (in case this isn't literally the first save in DB)
+    if (res.ok) {
+      setShowReferralUI(true);
+      setShowInviteBanner(true);
+      if ((data as TriggerFirstProjectResponse).showPrompt) {
+        toast.success('Great first project! Share your invite link');
+      } else {
+        toast.message('Invite your colleague with your referral link');
+      }
+    }
   }
 
   const [user, setUser] = useState<Pick<BasicUser, 'id' | 'email' | 'referralCode'> | null>(null);
@@ -50,12 +80,19 @@ export default function Home() {
       .then((data) => {
         if (data.user) {
           setUser(data.user);
+          if (data.user.referralCode) {
+            try { setReferralLink(`${window.location.origin}/invite/${data.user.referralCode}`); } catch {}
+          }
           // load full user document (includes referredBy, credits, activationEvents)
           fetch('/api/debug/user-by-email?email=' + encodeURIComponent(data.user.email))
             .then((r2) => r2.json() as Promise<DebugUserResponse>)
             .then((full) => {
                   if (full && full.user) {
                     setMyUser(full.user);
+                    // If user already saved at least one project, reveal invite prompt immediately
+                    if (typeof full.user.projectsSaved === 'number' && full.user.projectsSaved > 0) {
+                      setShowReferralUI(true);
+                    }
                     // Load your referrals (people you referred)
                     fetch('/api/debug/referrals-of?id=' + encodeURIComponent(full.user.id))
                       .then((r) => r.json() as Promise<ReferralsResponse>)
@@ -99,24 +136,7 @@ export default function Home() {
   // removed createUserBWithReferral — signup should occur externally. We'll record activations for `myEmail`.
 
   async function recordActivationEvent(eventName: string) {
-    // By default record for the logged-in user's full id (if available)
-    let referredId = myUser?.id || user?.id;
-
-    // If the logged-in user has a denormalized referrerEmail and that email maps to a user in the DB,
-    // then record the activation for that resolved user instead (per UI request).
-    if (myUser?.referrerEmail) {
-      try {
-        const probe = await fetch('/api/debug/user-by-email?email=' + encodeURIComponent(myUser.referrerEmail));
-        const pj = (await probe.json()) as DebugUserResponse;
-        if (pj && pj.user && pj.user.id) {
-          addLog('recordActivationEvent: resolved referrerEmail to ' + pj.user.email + ', recording for that user');
-          referredId = pj.user.id;
-        }
-      } catch {
-        // resolution failed; fall back to current user
-      }
-    }
-
+    const referredId = myUser?.id || user?.id;
     if (!referredId) return addLog('recordActivationEvent: no current user loaded');
 
     const res = await fetch('/api/referrals/record-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ referredId, eventName, props: { article_count: eventName === 'Literature Matrix Created' ? 3 : undefined } }) });
@@ -133,6 +153,17 @@ export default function Home() {
           if (refJson && refJson.user) setReferrerUser({ id: refJson.user.id, email: refJson.user.email, credits: refJson.user.credits, premiumMonths: refJson.user.premiumMonths });
         } catch {}
       }
+      // If this user is a referrer, refresh their referrals list to reflect completion
+      try {
+        const meToken = localStorage.getItem('token');
+        if (meToken && user?.id) {
+          const me = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + meToken } }).then(r => r.json() as Promise<MeResponse>);
+          if (me && me.user) {
+            const rr = await fetch('/api/debug/referrals-of?id=' + encodeURIComponent(me.user.id)).then(r => r.json() as Promise<ReferralsResponse>);
+            if (rr && Array.isArray(rr.referrals)) setMyReferrals(rr.referrals);
+          }
+        }
+      } catch {}
     }
   }
 
@@ -151,6 +182,17 @@ export default function Home() {
       )}
       {user && (
       <div className="flex flex-col gap-6">
+        {showInviteBanner && referralLink && (
+          <div className="rounded-md border bg-emerald-500/5 p-4">
+            <div className="mb-2 text-sm font-medium">Looks like you’re on to a great idea.</div>
+            <div className="text-sm text-muted-foreground mb-3">Give a colleague 20 free credits to start their research, and get 1 month of Premium when they create their first project.</div>
+            <div className="flex gap-2">
+              <Input readOnly value={referralLink} />
+              <Button type="button" onClick={() => { if (referralLink) { navigator.clipboard.writeText(referralLink); toast.success('Copied invite link'); } }}>Copy</Button>
+              <Button type="button" variant="secondary" onClick={() => setShowInviteBanner(false)}>Dismiss</Button>
+            </div>
+          </div>
+        )}
         <Card>
           <CardHeader>
             <CardTitle>Your account</CardTitle>
@@ -159,8 +201,26 @@ export default function Home() {
           <CardContent className="space-y-3">
             <div className="font-semibold">{user.email}</div>
             <Separator />
-            <div className="text-muted-foreground">Your referral code (if any):</div>
-            <div className="font-semibold">{user.referralCode || '—'}</div>
+            {showReferralUI ? (
+              <>
+                <div className="text-muted-foreground">Your referral code</div>
+                <div className="font-semibold">{user.referralCode || '—'}</div>
+                {user.referralCode && (
+                  <div className="space-y-2 pt-2">
+                    <div className="text-muted-foreground">Share your invite link</div>
+                    <div className="flex gap-2">
+                      <Input readOnly value={referralLink} />
+                      <Button type="button" onClick={() => { if (referralLink) { navigator.clipboard.writeText(referralLink); toast.success('Copied invite link'); } }}>
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : null}
+            <div className="pt-2">
+              <Button type="button" variant="secondary" className="border" onClick={triggerMyFirstProject}>Simulate a project</Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -174,9 +234,11 @@ export default function Home() {
                 <div className="text-muted-foreground">Referrer</div>
                 <div className="font-semibold">{referrerUser ? referrerUser.email : '—'}</div>
               </div>
+              {/*
               <Button onClick={triggerReferrerFirstProject} disabled={!referrerUser} className="rounded-md border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
                 Trigger first project
               </Button>
+              */}
             </div>
 
             <div className="flex items-center gap-2">
@@ -191,6 +253,7 @@ export default function Home() {
               <Button onClick={() => recordActivationEvent('Profile Completed')} className="rounded-md border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">Profile Completed</Button>
               <Button onClick={() => recordActivationEvent('Project Saved')} className="rounded-md border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">Project Saved</Button>
               <Button onClick={() => recordActivationEvent('Literature Matrix Created')} className="rounded-md border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">Literature Matrix Created</Button>
+              <Button onClick={() => recordActivationEvent('Research Proposal Created')} className="rounded-md border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">Research Proposal Created</Button>
             </div>
 
             <div className="space-y-3 pt-2">
@@ -231,6 +294,7 @@ export default function Home() {
                 <div>
                   <div className="font-medium text-sm">{r.email}</div>
                   <div className="text-xs text-muted-foreground">Code: {r.referralCode || '—'}</div>
+                  <div className="text-xs text-muted-foreground">Status: {r.referralStatus || (r.completed ? 'activated' : 'pending')}</div>
                 </div>
                 <div className={"text-xs px-2 py-1 rounded-md " + (r.completed ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20") }>
                   {r.completed ? 'Completed' : 'In progress'}

@@ -1,6 +1,6 @@
 "use client";
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,17 @@ import { toast } from "sonner";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const search = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [referral, setReferral] = useState('');
   const [msg, setMsg] = useState('');
   // toast via sonner
+
+  useEffect(() => {
+    const code = search?.get('code');
+    if (code) setReferral(code);
+  }, [search]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,7 +46,7 @@ export default function SignUpPage() {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: exampleEmail, password: 'password123', referralCode: 'ru99mi0' }),
+      body: JSON.stringify({ email: exampleEmail, password: 'password123', referralCode: 'woilfh6' }),
     });
     const data = (await res.json()) as { token?: string; error?: string };
     if (!res.ok) {
@@ -78,7 +84,7 @@ export default function SignUpPage() {
             <div className="flex flex-wrap gap-2">
               <Button type="submit">Sign up</Button>
               <Button type="button" variant="secondary" onClick={createExampleUser}>
-                Create example user (uses ru99mi0)
+                Create example user (uses woilfh6)
               </Button>
             </div>
           </form>

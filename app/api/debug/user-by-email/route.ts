@@ -33,12 +33,13 @@ export async function GET(req: Request) {
   // No separate referrals collection in this schema — we only use `user.referredBy`.
 
   // Return referrerEmail inside the user object as well for convenience on the client
-  const outUser: { id: string; email: string; referralCode?: string; credits: number; premiumMonths: number; referrerEmail?: string } = {
+  const outUser: { id: string; email: string; referralCode?: string; credits: number; premiumMonths: number; projectsSaved: number; referrerEmail?: string } = {
     id: user._id.toString(),
     email: user.email,
     referralCode: user.referralCode,
     credits: user.credits || 0,
     premiumMonths: user.premiumMonths || 0,
+    projectsSaved: user.projectsSaved || 0,
   };
   if (referrerEmail) outUser.referrerEmail = referrerEmail;
 
